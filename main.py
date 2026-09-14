@@ -17,10 +17,21 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
+
+
+def command_to_bytes(command: str) -> bytes:
+    replacements = {
+        "\\r": "\r",
+        "\\n": "\n",
+        "\\t": "\t",
+        "\\\\": "\\",
+    }
+    for text, control_char in replacements.items():
+        command = command.replace(text, control_char)
+    return command.encode("utf-8")
 
 
 class SendWorker(QThread):
@@ -92,7 +103,7 @@ class SendWorker(QThread):
     def _send_command(self, command: str) -> None:
         if self._serial is None or not self._serial.is_open:
             raise serial.SerialException("串口未打开")
-        self._serial.write(command.encode("utf-8"))
+        self._serial.write(command_to_bytes(command))
         self._serial.flush()
         self.status_changed.emit(f"已发送：{command}")
 
@@ -141,9 +152,11 @@ class MainWindow(QMainWindow):
         command_group = QGroupBox("发送指令")
         command_layout = QFormLayout(command_group)
         self.on_command_edit = QLineEdit()
-        self.on_command_edit.setPlaceholderText("例如：ON")
+        self.on_command_edit.setText(":CONF:VOLT:DC\\r\\n")
+        self.on_command_edit.setPlaceholderText("例如：:CONF:VOLT:DC\\r\\n")
         self.off_command_edit = QLineEdit()
-        self.off_command_edit.setPlaceholderText("例如：OFF")
+        self.off_command_edit.setText(":CONF:VOLT:AC\\r\\n")
+        self.off_command_edit.setPlaceholderText("例如：:CONF:VOLT:AC\\r\\n")
         command_layout.addRow("ON 指令：", self.on_command_edit)
         command_layout.addRow("OFF 指令：", self.off_command_edit)
         root_layout.addWidget(command_group)
@@ -152,12 +165,12 @@ class MainWindow(QMainWindow):
         timing_layout = QFormLayout(timing_group)
         self.on_delay_spin, self.on_delay_unit = self._create_delay_row()
         self.off_delay_spin, self.off_delay_unit = self._create_delay_row()
-        timing_layout.addRow("ON 后延时：", self._delay_row(
-            self.on_delay_spin, self.on_delay_unit
-        ))
-        timing_layout.addRow("OFF 后延时：", self._delay_row(
-            self.off_delay_spin, self.off_delay_unit
-        ))
+        timing_layout.addRow(
+            "ON 后延时：", self._delay_row(self.on_delay_spin, self.on_delay_unit)
+        )
+        timing_layout.addRow(
+            "OFF 后延时：", self._delay_row(self.off_delay_spin, self.off_delay_unit)
+        )
         root_layout.addWidget(timing_group)
 
         control_layout = QHBoxLayout()
@@ -249,9 +262,7 @@ class MainWindow(QMainWindow):
             on_command=on_command,
             off_command=off_command,
             on_delay_ms=self._delay_to_ms(self.on_delay_spin, self.on_delay_unit),
-            off_delay_ms=self._delay_to_ms(
-                self.off_delay_spin, self.off_delay_unit
-            ),
+            off_delay_ms=self._delay_to_ms(self.off_delay_spin, self.off_delay_unit),
         )
         self.worker.cycle_changed.connect(
             lambda count: self.cycle_label.setText(str(count))
